@@ -11,3 +11,9 @@ npx nodemon server.js
 
 Once Server is running on port 3000, test on:
 http://localhost:3000/api/github/repo?owner=in-c0&repo=GRAKKEN-Github-Repo-Analyser
+
+Check Github API rate limit status at :
+https://api.github.com/rate_limit
+
+(Unauthenticated requests can be made 60 times per hour)
+
