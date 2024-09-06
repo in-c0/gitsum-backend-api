@@ -1,3 +1,12 @@
+// Main server file (server.js). This file sets up an Express server and imports routes for handling GitHub-related requests.
+// Run with:
+//    node server.js
+// or
+//    npx nodemon server.js
+//   (for server restart on file changes)
+// Once Server is running on port 3000, you can test with:
+// http://localhost:3000/api/github/repo?owner=in-c0&repo=GRAKKEN-Github-Repo-Analyser
+
 require('dotenv').config();
 const express = require('express');
 const app = express();
