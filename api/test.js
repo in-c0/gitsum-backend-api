@@ -1,4 +1,5 @@
 // this will map to {relativePath}/api/github/test.
 module.exports = (req, res) => {
-    return res.send('Test route is working!');
-};
+    res.status(200).json({ message: "Test route is working!" });
+  };
+  
