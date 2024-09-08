@@ -2,6 +2,11 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const OpenAI = require("openai");
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // Helper function to fetch repository contents
 const fetchRepoContents = async (owner, repo, path = '') => {
@@ -13,7 +18,7 @@ const fetchRepoContents = async (owner, repo, path = '') => {
 
 // Route to fetch and summarize GitHub repository contents
 router.get('/repo', async (req, res) => {
-    const { owner, repo } = req.query; // Expect owner and repo in query params
+    const { owner, repo } = req.query;
     if (!owner || !repo) {
         return res.status(400).json({ message: 'Owner and repo are required.' });
     }
@@ -22,23 +27,47 @@ router.get('/repo', async (req, res) => {
         // Fetch the repository contents
         const repoContents = await fetchRepoContents(owner, repo);
         
-        // Summarize important files (e.g., README.md)
-        const readme = repoContents.find(file => file.name === 'README.md');
+        // Get README content if it exists
+        const readme = repoContents.find(file => file.name.toLowerCase() === 'readme.md');
+        let readmeContent = '';
         if (readme) {
-            const readmeContent = await axios.get(readme.download_url);
-            // Placeholder for summarization (replace with OpenAI API call)
-            const summary = readmeContent.data.slice(0, 100) + '...'; // Simple truncation for now
-
-            res.json({
-                message: `Summary of ${owner}/${repo}`,
-                summary,
-            });
-        } else {
-            res.json({ message: 'README.md not found' });
+            const readmeResponse = await axios.get(readme.download_url);
+            readmeContent = readmeResponse.data;
         }
+
+        // Generate summary using OpenAI
+        const prompt = `Summarize the following GitHub repository:
+        Repository: ${owner}/${repo}
+        Repo Contents: ${repoContents.map(item => item.name).join(', ')}
+        README: ${readmeContent.slice(0, 1000)}...`;
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4",
+            messages: [
+                {
+                    "role": "system",
+                    "content": "You are a helpful summariser of a GitHub repository. The aim is to make the repository easy to understand for non-technical background users."
+                },
+                {
+                    "role": "user",
+                    "content": `Summarize the following GitHub repository:
+                    Repository: ${owner}/${repo}
+                    Contents: ${repoContents.map(item => item.name).join(', ')}
+                    README: ${readmeContent}`
+                }
+            ],
+        });
+        
+        const summary = completion.choices[0].message.content.trim();
+        
+
+        res.json({
+            message: `Summary of ${owner}/${repo}`,
+            summary,
+        });
     } catch (error) {
-        console.error('Error fetching repo contents:', error);
-        res.status(500).json({ message: 'Error fetching repository contents' });
+        console.error('Error processing repo:', error);
+        res.status(500).json({ message: 'Error processing repository' });
     }
 });
 
