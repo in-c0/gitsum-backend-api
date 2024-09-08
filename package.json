@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "vercel dev",
+    "build": "echo 'No build step needed for serverless functions'"
   },
   "keywords": [],
   "author": "",
@@ -12,9 +13,9 @@
   "dependencies": {
     "axios": "^1.7.7",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
     "openai": "^4.58.1"
   },
+  
   "devDependencies": {
     "nodemon": "^3.1.4"
   }
