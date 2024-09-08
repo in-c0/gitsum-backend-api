@@ -16,8 +16,12 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // Import GitHub routes
-const githubRoutes = require('./routes/github');
-app.use('/api/github', githubRoutes);
+const githubRoutes = require('./github/repo');
+app.use('/api/github', (req, res, next) => {
+    console.log(`Incoming request to /api/github: ${req.method} ${req.url}`);
+    next();
+}, githubRoutes);
+
 
 // Root route (for basic health check)
 app.get('/', (req, res) => {
