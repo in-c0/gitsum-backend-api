@@ -1,10 +1,11 @@
 import { Octokit } from '@octokit/rest';
 import OpenAI from "openai";
+import Redis from 'ioredis';
+
+const redis = new Redis(process.env.REDIS_URL); // Configure your Redis connection
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const octokit = new Octokit({ auth: process.env.GITHUB_API_KEY });
-
-export const taskStore = {}; // Initialize task store to keep track of progress
 
 // Helper function to fetch repository tree structure
 const fetchRepoContents = async (owner, repo) => {
@@ -23,7 +24,6 @@ const fetchRepoContents = async (owner, repo) => {
     }
 };
 
-// The Vercel serverless function handler for /api/github/repo
 export default async (req, res) => {
     if (req.method === 'GET') {
         const { owner, repo } = req.query;
@@ -34,12 +34,16 @@ export default async (req, res) => {
 
         // Create a unique task ID (e.g., based on repo name and owner)
         const taskId = `${owner}/${repo}`;
-        taskStore[taskId] = { status: "Looking for key files..." };
+
+        // Initialize task in Redis
+        await redis.set(taskId, JSON.stringify({ status: "Looking for key files..." }));
 
         try {
             // Step 1: Fetch the repository contents from GitHub
             const repoContents = await fetchRepoContents(owner, repo);
-            taskStore[taskId].status = "Reading key files...";
+
+            // Update task progress
+            await redis.set(taskId, JSON.stringify({ status: "Reading key files..." }));
 
             // Find the README.md file and fetch its content
             let readmeContent = '';
@@ -53,9 +57,10 @@ export default async (req, res) => {
                 console.error('Error fetching README content:', err);
             }
 
-            taskStore[taskId].status = "Summarizing with ChatGPT 4...";
+            // Update task progress to summarizing
+            await redis.set(taskId, JSON.stringify({ status: "Summarizing with ChatGPT 4..." }));
 
-            // Step 2: Generate summary using OpenAI (truncate README for faster response)
+            // Step 2: Generate summary using OpenAI
             const completion = await openai.chat.completions.create({
                 model: "gpt-4",
                 messages: [
@@ -68,19 +73,23 @@ export default async (req, res) => {
                         "content": `Summarize the following GitHub repository:
                         Repository: ${owner}/${repo}
                         Contents: ${repoContents.map(item => item.path).join(', ')}
-                        README: ${readmeContent.slice(0, 1000)}...`  // Limit the length of the README
+                        README: ${readmeContent.slice(0, 1000)}...`
                     }
                 ],
             });
 
             const summary = completion.choices[0].message.content.trim();
-            taskStore[taskId].summary = summary;
-            taskStore[taskId].status = "done";
+
+            // Store the final summary and mark the task as done in Redis
+            await redis.set(taskId, JSON.stringify({ status: "done", summary }));
 
             return res.json({ taskId });
         } catch (error) {
             console.error('Error in /api/github/repo:', error);
-            taskStore[taskId].status = "error";
+
+            // Mark the task as errored in Redis
+            await redis.set(taskId, JSON.stringify({ status: "error" }));
+
             return res.status(500).json({ message: 'Internal server error' });
         }
     } else {

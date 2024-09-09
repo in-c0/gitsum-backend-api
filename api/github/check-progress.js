@@ -1,5 +1,6 @@
-// Import the task store from where the repository job progress is being tracked
-import { taskStore } from './repo.js'; // Make sure taskStore is accessible and defined
+import Redis from 'ioredis';
+
+const redis = new Redis(process.env.REDIS_URL); // Use the same Redis instance
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
@@ -10,14 +11,17 @@ export default async function handler(req, res) {
     }
 
     const taskId = `${owner}/${repo}`;
-    
-    // Check if taskId exists in the task store
-    if (!taskStore[taskId]) {
+
+    // Retrieve the task status from Redis
+    const taskData = await redis.get(taskId);
+
+    if (!taskData) {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Return the current progress status of the task
-    const taskStatus = taskStore[taskId];
+    // Parse the task data from Redis
+    const taskStatus = JSON.parse(taskData);
+
     return res.status(200).json({
       status: taskStatus.status,
       summary: taskStatus.status === 'done' ? taskStatus.summary : null,
