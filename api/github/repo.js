@@ -4,28 +4,26 @@ import OpenAI from "openai";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const octokit = new Octokit({ auth: process.env.GITHUB_API_KEY });
 
+// In-memory store for task status (use Redis or another persistent store in production)
+const taskStore = {};
+
 // Helper function to fetch repository tree structure
-const fetchRepoContents = async (owner, repo, recursive = false, path = '') => {
+const fetchRepoContents = async (owner, repo) => {
     try {
-        // Fetch the repository's tree structure (either top-level or recursive)
         const { data } = await octokit.git.getTree({
             owner,
             repo,
             tree_sha: 'HEAD',
-            recursive,  // Set recursive based on the request
+            recursive: false,  // Fetch only the top-level directory
         });
 
-        // If a specific path is provided, filter the tree to only include files in that path
-        if (path) {
-            return data.tree.filter(item => item.path.startsWith(path));
-        }
-
-        return data.tree;
+        return data.tree.filter(item => item.path === 'README.md' || item.path === 'package.json');  // Filter key files
     } catch (error) {
-        console.error('Error fetching GitHub repository contents:', error);
+        console.error('Error fetching repository contents:', error);
         throw error;
     }
 };
+
 // The Vercel serverless function handler for /api/github/repo
 export default async (req, res) => {
     if (req.method === 'GET') {
@@ -35,12 +33,16 @@ export default async (req, res) => {
             return res.status(400).json({ message: 'Owner and repo are required.' });
         }
 
+        // Create a unique task ID (e.g., based on repo name and owner)
+        const taskId = `${owner}/${repo}`;
+        taskStore[taskId] = { status: "Looking for key files..." };
+
         try {
-            // Fetch the repository contents from GitHub
+            // Step 1: Fetch the repository contents from GitHub
             const repoContents = await fetchRepoContents(owner, repo);
-            // console.log('Fetched repo contents:', repoContents);
-                        
-            // Find the README.md file (wherever it is in the structure)
+            taskStore[taskId].status = "Reading key files...";
+
+            // Find the README.md file and fetch its content
             let readmeContent = '';
             try {
                 const { data: readmeData } = await octokit.repos.getReadme({
@@ -51,9 +53,10 @@ export default async (req, res) => {
             } catch (err) {
                 console.error('Error fetching README content:', err);
             }
-            
 
-            // Generate summary using OpenAI (using truncated content for faster response)
+            taskStore[taskId].status = "Summarizing with ChatGPT 4...";
+
+            // Step 2: Generate summary using OpenAI (truncate README for faster response)
             const completion = await openai.chat.completions.create({
                 model: "gpt-4",
                 messages: [
@@ -72,19 +75,16 @@ export default async (req, res) => {
             });
 
             const summary = completion.choices[0].message.content.trim();
+            taskStore[taskId].summary = summary;
+            taskStore[taskId].status = "done";
 
-            // Return the summary and the top-level repo contents
-            return res.json({
-                message: `Summary of ${owner}/${repo}`,
-                summary,
-                topLevelFiles: repoContents.filter(item => item.type === 'blob' || item.type === 'tree')
-            });
+            return res.json({ taskId });
         } catch (error) {
             console.error('Error in /api/github/repo:', error);
+            taskStore[taskId].status = "error";
             return res.status(500).json({ message: 'Internal server error' });
         }
     } else {
-        // If the request is not a GET request
         return res.status(405).json({ message: 'Method Not Allowed' });
     }
 };
