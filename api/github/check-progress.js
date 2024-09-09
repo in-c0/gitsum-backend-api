@@ -1,21 +1,14 @@
 import { createClient } from 'redis';
 
-// Use the redis client
 const client = createClient({
     password: process.env.REDIS_PASSWORD,
     socket: {
-        host: process.env.REDIS_HOST, 
+        host: process.env.REDIS_HOST,
         port: process.env.REDIS_PORT,
     }
 });
 
-// Connect to Redis
 client.connect();
-
-// Error handling for Redis connection
-client.on('error', (err) => {
-  console.error('Redis connection error:', err);
-});
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
@@ -47,7 +40,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ message: 'Internal server error' });
     }
   } else {
-    // Handle unsupported methods
     res.setHeader('Allow', ['GET']);
     res.status(405).json({ message: `Method ${req.method} not allowed` });
   }
