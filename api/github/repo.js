@@ -1,24 +1,59 @@
+import { Octokit } from '@octokit/rest';
 import { createClient } from 'redis';
+import OpenAI from 'openai';
 
+// Initialize Redis connection
 const client = createClient({
-    
-    password: process.env.client_PASSWORD,
+    password: process.env.REDIS_PASSWORD,
     socket: {
-        host: process.env.client_HOST, 
-        port: process.env.client_PORT,
+        host: process.env.REDIS_HOST,
+        port: process.env.REDIS_PORT,
     }
 });
 
-// Connect to client
 client.connect();
 
-// Error handling for client connection
-client.on('error', (err) => {
-  console.error('client connection error:', err);
-});
+const octokit = new Octokit({ auth: process.env.GITHUB_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// Function to process repository tree for frontend
+const processDataForTreeView = (data) => {
+  const buildTree = (items, path = '') => {
+    const tree = {};
+    items.forEach(item => {
+      const parts = item.path.split('/');
+      let currentLevel = tree;
 
-// Export the handler
+      parts.forEach((part, index) => {
+        if (!currentLevel[part]) {
+          currentLevel[part] = {
+            name: part,
+            path: parts.slice(0, index + 1).join('/'),
+            type: index === parts.length - 1 ? (item.type === 'blob' ? 'file' : 'dir') : 'dir',
+            size: item.size,
+            sha: item.sha,
+            children: {},
+          };
+        }
+        currentLevel = currentLevel[part].children;
+      });
+    });
+
+    const flattenTree = (node) => {
+      const children = Object.values(node.children).map(flattenTree);
+      const { children: _, ...nodeWithoutChildren } = node;
+      return {
+        ...nodeWithoutChildren,
+        children: children.length > 0 ? children : undefined,
+      };
+    };
+
+    return Object.values(tree).map(flattenTree);
+  };
+
+  return buildTree(data);
+};
+
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     const { owner, repo } = req.query;
@@ -30,24 +65,35 @@ export default async function handler(req, res) {
     const taskId = `${owner}/${repo}`;
 
     try {
-      const taskData = await client.get(taskId);
+      // Fetch repository tree from GitHub
+      const response = await octokit.git.getTree({
+        owner,
+        repo,
+        tree_sha: 'HEAD',
+        recursive: "1",
+      });
 
-      if (!taskData) {
-        return res.status(404).json({ message: 'Task not found' });
+      const repoContents = response.data;
+
+      // Log the response to check the structure
+      console.log('Repo contents response:', repoContents);
+
+      // Check if tree is available in the response
+      if (!repoContents || !repoContents.tree) {
+        throw new Error('Repository tree could not be fetched or is empty.');
       }
 
-      const taskStatus = JSON.parse(taskData);
+      // Process repository tree for the frontend
+      const treeData = processDataForTreeView(repoContents.tree);
 
-      return res.status(200).json({
-        status: taskStatus.status,
-        summary: taskStatus.status === 'done' ? taskStatus.summary : null,
-      });
+      // Return the tree data to the frontend
+      return res.status(200).json({ treeData });
+
     } catch (error) {
-      console.error('Error fetching task from client:', error);
+      console.error('Error processing repository:', error);
       return res.status(500).json({ message: 'Internal server error' });
     }
   } else {
-    // Handle unsupported methods
     res.setHeader('Allow', ['GET']);
     res.status(405).json({ message: `Method ${req.method} not allowed` });
   }
