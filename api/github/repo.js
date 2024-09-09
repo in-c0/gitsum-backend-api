@@ -5,23 +5,27 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const octokit = new Octokit({ auth: process.env.GITHUB_API_KEY });
 
 // Helper function to fetch repository tree structure
-const fetchRepoContents = async (owner, repo) => {
+const fetchRepoContents = async (owner, repo, recursive = false, path = '') => {
     try {
-        // Fetch the repository's top-level tree structure (you can change `recursive: true` to fetch full tree)
+        // Fetch the repository's tree structure (either top-level or recursive)
         const { data } = await octokit.git.getTree({
             owner,
             repo,
-            tree_sha: 'HEAD',  // Get the latest tree from the repository's default branch (HEAD)
-            recursive: true,   // Fetch the entire tree (set to false if you only need top-level files)
+            tree_sha: 'HEAD',
+            recursive,  // Set recursive based on the request
         });
 
-        return data.tree;  // Returns the array of file/directory metadata
+        // If a specific path is provided, filter the tree to only include files in that path
+        if (path) {
+            return data.tree.filter(item => item.path.startsWith(path));
+        }
+
+        return data.tree;
     } catch (error) {
         console.error('Error fetching GitHub repository contents:', error);
         throw error;
     }
 };
-
 // The Vercel serverless function handler for /api/github/repo
 export default async (req, res) => {
     if (req.method === 'GET') {
@@ -34,20 +38,20 @@ export default async (req, res) => {
         try {
             // Fetch the repository contents from GitHub
             const repoContents = await fetchRepoContents(owner, repo);
-
-            // Get README content if it exists
-            const readme = repoContents.find(file => file.name.toLowerCase() === 'readme.md');
+            // console.log('Fetched repo contents:', repoContents);
+                        
+            // Find the README.md file (wherever it is in the structure)
             let readmeContent = '';
-            if (readme) {
-                const { data: readmeData } = await octokit.repos.getContent({
+            try {
+                const { data: readmeData } = await octokit.repos.getReadme({
                     owner,
-                    repo,
-                    path: readme.path
+                    repo
                 });
-
-                // Decode base64 README content
                 readmeContent = Buffer.from(readmeData.content, 'base64').toString();
+            } catch (err) {
+                console.error('Error fetching README content:', err);
             }
+            
 
             // Generate summary using OpenAI (using truncated content for faster response)
             const completion = await openai.chat.completions.create({
