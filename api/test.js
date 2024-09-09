@@ -1,5 +1,5 @@
 // this will map to {relativePath}/api/github/test.
-module.exports = (req, res) => {
+export default (req, res) => {
     res.status(200).json({ message: "Test route is working!" });
   };
   

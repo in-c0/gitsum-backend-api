@@ -21,6 +21,12 @@ https://api.github.com/rate_limit
 Express is no longer being used ; Vercel serverless functions are used instead. 
 Run with :
     vercel dev
+or
+    vercel dev --debug
+
+Clear cache and Redeploy:
+    vercel --prod --force
+
 // Once Server is running on port 3000, you can test with:
 // http://localhost:3000/api/github/repo?owner=in-c0&repo=GRAKKEN-Github-Repo-Analyser
 
