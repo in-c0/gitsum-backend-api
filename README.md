@@ -64,3 +64,8 @@ Explanation:
 package.json
 vercel.json
 ```
+
+
+
+
+10/09/2024: Trying to get streaming data passed to the client but it's somehow not working.
