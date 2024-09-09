@@ -80,14 +80,11 @@ export default async function handler(req, res) {
   
             // Write the chunk to the client
             res.write(`data: ${sentence}\n\n`);
-  
-            // Save partial summary to Redis
-            await redis.set(taskId, summary);
           }
         }
   
-        // Mark the summary as complete
-        await redis.set(taskId, summary + " [DONE]");
+        // Save to redis (DB) only when it's done
+        await redis.set(taskId, summary);
         res.write(`data: [DONE]\n\n`);
         res.end();
       } catch (error) {
