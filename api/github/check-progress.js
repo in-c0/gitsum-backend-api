@@ -1,6 +1,21 @@
-import Redis from 'ioredis';
+import { createClient } from 'redis';
 
-const redis = new Redis(process.env.REDIS_URL); // Use the same Redis instance
+// Use the redis client
+const client = createClient({
+    password: process.env.REDIS_PASSWORD,
+    socket: {
+        host: process.env.REDIS_HOST, 
+        port: process.env.REDIS_PORT,
+    }
+});
+
+// Connect to Redis
+client.connect();
+
+// Error handling for Redis connection
+client.on('error', (err) => {
+  console.error('Redis connection error:', err);
+});
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
@@ -12,20 +27,25 @@ export default async function handler(req, res) {
 
     const taskId = `${owner}/${repo}`;
 
-    // Retrieve the task status from Redis
-    const taskData = await redis.get(taskId);
+    try {
+      // Retrieve the task status from Redis
+      const taskData = await client.get(taskId);
 
-    if (!taskData) {
-      return res.status(404).json({ message: 'Task not found' });
+      if (!taskData) {
+        return res.status(404).json({ message: 'Task not found' });
+      }
+
+      // Parse the task data from Redis
+      const taskStatus = JSON.parse(taskData);
+
+      return res.status(200).json({
+        status: taskStatus.status,
+        summary: taskStatus.status === 'done' ? taskStatus.summary : null,
+      });
+    } catch (error) {
+      console.error('Error fetching task from Redis:', error);
+      return res.status(500).json({ message: 'Internal server error' });
     }
-
-    // Parse the task data from Redis
-    const taskStatus = JSON.parse(taskData);
-
-    return res.status(200).json({
-      status: taskStatus.status,
-      summary: taskStatus.status === 'done' ? taskStatus.summary : null,
-    });
   } else {
     // Handle unsupported methods
     res.setHeader('Allow', ['GET']);
