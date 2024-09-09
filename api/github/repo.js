@@ -4,8 +4,7 @@ import OpenAI from "openai";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const octokit = new Octokit({ auth: process.env.GITHUB_API_KEY });
 
-// In-memory store for task status (use Redis or another persistent store in production)
-const taskStore = {};
+export const taskStore = {}; // Initialize task store to keep track of progress
 
 // Helper function to fetch repository tree structure
 const fetchRepoContents = async (owner, repo) => {
